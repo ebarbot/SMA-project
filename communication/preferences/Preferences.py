@@ -8,7 +8,7 @@ from math import ceil
 import numpy as np
 
 
-class Preferences:
+class Preferences(object):
     """Preferences class.
     This class implements the preferences of an agent.
 
@@ -86,7 +86,7 @@ class Preferences:
         sorted_list=self.sort_items(item_list)
         max_index = ceil(len(item_list)/10)-1
         return item.get_score(self)>=sorted_list[max_index][0]
-
+    
 
 if __name__ == '__main__':
     """Testing the Preferences class.

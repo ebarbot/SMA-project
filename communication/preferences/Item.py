@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 
-class Item:
+class Item(object):
     """Item class.
     This class implements the objects about which the argument will be conducted.
 
