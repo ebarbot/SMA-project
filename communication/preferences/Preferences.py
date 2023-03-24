@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-from communication.preferences.CriterionName import CriterionName
-from communication.preferences.CriterionValue import CriterionValue
-from communication.preferences.Item import Item
-from communication.preferences.Value import Value
+from CriterionName import CriterionName
+from CriterionValue import CriterionValue
+from Item import Item
+from Value import Value
+from math import ceil
+import numpy as np
 
 
 class Preferences:
@@ -63,11 +65,17 @@ class Preferences:
         """
         return item_1.get_score(self) > item_2.get_score(self)
 
+    def sort_items(self,item_list):
+        liste=[(item.get_score(self),item) for item in item_list]
+        liste.sort(reverse=True)
+        return liste
+
     def most_preferred(self, item_list):
         """Returns the most preferred item from a list.
         """
-        # To be completed
-        return best_item
+        sorted_list=self.sort_items(item_list)
+        max_val = sorted_list[0][0]
+        return np.random.choice([item[1] for item in sorted_list if item[0] == max_val])
 
     def is_item_among_top_10_percent(self, item, item_list):
         """
@@ -75,8 +83,9 @@ class Preferences:
 
         :return: a boolean, True means that the item is among the favourite ones
         """
-        # To be completed
-        return is_top_item
+        sorted_list=self.sort_items(item_list)
+        max_index = ceil(len(item_list)/10)-1
+        return item.get_score(self)>=sorted_list[max_index][0]
 
 
 if __name__ == '__main__':
