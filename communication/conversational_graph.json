@@ -1,0 +1,37 @@
+{
+    "directed": false,
+    "multigraph": false,
+    "graph": {},
+    "nodes": [
+        {
+            "id": "PROPOSE"
+        },
+        {
+            "id": "ACCEPT"
+        },
+        {
+            "id": "COMMIT"
+        },
+        {
+            "id": "ASK_WHY"
+        }
+    ],
+    "links": [
+        {
+            "source": "PROPOSE",
+            "target": "ACCEPT"
+        },
+        {
+            "source": "PROPOSE",
+            "target": "ASK_WHY"
+        },
+        {
+            "source": "ACCEPT",
+            "target": "COMMIT"
+        },
+        {
+            "source": "COMMIT",
+            "target": "COMMIT"
+        }
+    ]
+}

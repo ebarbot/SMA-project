@@ -1,5 +1,6 @@
 from mesa import Model
 from mesa.time import RandomActivation
+
 from agent.CommunicatingAgent import CommunicatingAgent
 from preferences.PreferenceModel import RandomIntervalProfile, IntervalProfileCSV
 from preferences.ItemFactory import ItemCreator_CSV
@@ -11,6 +12,8 @@ from preferences.CriterionValue import CriterionValue
 from message.MessageService import MessageService
 from message.Message import Message
 from message.MessagePerformative import MessagePerformative
+from arguments.Argument import Argument
+
 from typing import List, Type, Union
 import pandas as pd
 import numpy as np
@@ -29,10 +32,39 @@ class ArgumentAgent(CommunicatingAgent):
     def step(self):
         super().step()
         if self.get_name() == "Agent 1":
-            item = self.preferences.most_preferred(self.list_items)
-            self.send_message(Message(self.get_name(), "Agent 2",
-                              MessagePerformative.PROPOSE, item))
-            print('Message de Agent 1 à Agent 2 : PROPOSE,', item)
+            nouveaux_messages = self.get_new_messages()
+            if nouveaux_messages == []:
+                item = self.preferences.most_preferred(self.list_items)
+                self.send_message(
+                    Message(self.get_name(), "Agent 2", MessagePerformative.PROPOSE, item))
+                print('Message de', self.get_name(),
+                      'à Agent 2 : PROPOSE,', item)
+            for message in nouveaux_messages:
+                exp = message.get_exp()
+                performative = message.get_performative()
+                item = message.get_content()
+                if performative == MessagePerformative.ACCEPT:
+                    self.send_message(
+                        Message(self.get_name(), exp, MessagePerformative.COMMIT, item))
+                    print('Message de', self.get_name(),
+                          'à', exp, ': COMMIT,', item)
+                elif performative == MessagePerformative.COMMIT:
+                    if item in self.list_items:
+                        self.list_items.remove(item)
+                        self.send_message(
+                            Message(self.get_name(), exp, MessagePerformative.COMMIT, item))
+                        print('Message de', self.get_name(),
+                              'à', exp, ': COMMIT,', item)
+                    else:
+                        self.send_message(
+                            Message(self.get_name(), exp, MessagePerformative.ARGUE, item))
+                        print('Message de', self.get_name(),
+                              'à', exp, ': ARGUE,', item)
+                elif performative == MessagePerformative.ASK_WHY:
+                    # A1 to A2: argue(item, premisses)
+                    best_argument = self.support_proposal(item)
+                    self.send_message(
+                        Message(self.get_name(), exp, MessagePerformative.ARGUE, best_argument))
         if self.get_name() == "Agent 2":
             nouveaux_messages = self.get_new_messages()
             for message in nouveaux_messages:
@@ -40,9 +72,28 @@ class ArgumentAgent(CommunicatingAgent):
                 performative = message.get_performative()
                 item = message.get_content()
                 if performative == MessagePerformative.PROPOSE:
-                    self.send_message(Message(self.get_name(), "Agent 1",
-                                      MessagePerformative.ACCEPT, item))
-                    print('Message de Agent 2 à Agent 1 : ACCEPT,', item)
+                    if self.preferences.is_item_among_top_10_percent(item, self.list_items):
+                        self.send_message(
+                            Message(self.get_name(), exp, MessagePerformative.ACCEPT, item))
+                        print('Message de', self.get_name(),
+                              'à', exp, ': ACCEPT,', item)
+                    else:
+                        self.send_message(
+                            Message(self.get_name(), exp, MessagePerformative.ASK_WHY, item))
+                        print('Message de', self.get_name(),
+                              'à', exp, ': ASK_WHY,', item)
+                elif performative == MessagePerformative.COMMIT:
+                    if item in self.list_items:
+                        self.list_items.remove(item)
+                        self.send_message(
+                            Message(self.get_name(), exp, MessagePerformative.COMMIT, item))
+                        print('Message de', self.get_name(),
+                              'à', exp, ': COMMIT,', item)
+                    else:
+                        self.send_message(
+                            Message(self.get_name(), exp, MessagePerformative.ARGUE, item))
+                        print('Message de', self.get_name(),
+                              'à', exp, ': ARGUE,', item)
 
     def print_preference_table(self):
         criterion_list = self.preferences.get_criterion_value_list()
@@ -87,6 +138,19 @@ class ArgumentAgent(CommunicatingAgent):
 
         if verbose:
             self.print_preference_table()
+
+    def support_proposal(self, item):
+        """
+        Used when the agent receives " ASK_WHY " after having proposed an item
+        : param item : str - name of the item which was proposed
+        : return : string - the strongest supportive argument
+        """
+        list_arguments = Argument.List_supporting_proposal(
+            item, self.preferences)
+        best_argument = Argument(True, item)
+        # les arguments sont ordonnés dans la liste
+        best_argument.add_premiss_couple_values(list_arguments[0])
+        return best_argument
 
 
 class ArgumentModel(Model):
