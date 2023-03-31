@@ -1,94 +1,103 @@
 from mesa import Model
 from mesa.time import RandomActivation
 from agent.CommunicatingAgent import CommunicatingAgent
+from preferences.PreferenceModel import RandomIntervalProfile
+from preferences.ItemFactory import ItemCreator_CSV
+from preferences.Preferences import Preferences
+from preferences.CriterionName import CriterionName
+from preferences.Value import Value
+from preferences.Item import Item
+from preferences.CriterionValue import CriterionValue
 from message.MessageService import MessageService
-from preferences import Preferences, Item, CriterionName, CriterionValue, Value
-from typing import List
+from typing import List, Type, Union
+import pandas as pd
+import numpy as np
 import random
-import inspect
-
-class GenerateData(object):
-    def __init__(self, num_items: int):
-        self.num_items = num_items
-        self.list_items = None
-        self.criteria_names = None
-
-    def generate_items(self):
-        self.list_items = []
-        self.items_values = []
-        for i in range(self.num_items):
-            new_item = Item(f"Item {i}", "This is an item :)")
-            self.list_items.append(new_item)
-        
-
-        return self.list_items
-    
-    def generate_criteria(self):
-        self.criteria_list = []
-
-        # https://stackoverflow.com/questions/9058305/getting-attributes-of-a-class
-        attributes = inspect.getmembers(CriterionName, lambda a: not(inspect.isroutine(a)))
-        self.criteria_names = [a for a in attributes if not(a[0].startswith('__') and a[0].endswith('__'))]
-
-        return self.criteria_names
 
 
-class ArgumentAgent (CommunicatingAgent):
+class ArgumentAgent(CommunicatingAgent):
     """ ArgumentAgent which inherit from CommunicatingAgent .
     """
-    def __init__ (self, unique_id: int, model: Model, name: str, preferences: Preferences):
-        super ().__init__ (unique_id, model, name, preferences)
-        self.preference = preferences
 
-    def step (self):
-        super ().step ()
+    def __init__(self, unique_id: int, model: Model, name: str, preferences: Preferences):
+        super().__init__(unique_id, model, name)
+        self.preferences = preferences
 
-    def get_preference (self):
-        return self.preference
+    def step(self):
+        super().step()
 
-    def generate_preferences(self, list_items, criterion_list):
-        self.preferences.set_criterion_name_list(random.shuffle([x[0] for x in criterion_list]))
+    def print_preference_table(self):
+        criterion_list = self.preferences.get_criterion_value_list()
+        criterion_names = self.preferences.get_criterion_name_list()
+
+        pref_table = {
+            criterion.name: {}
+            for criterion in criterion_names
+        }
+
+        for criterionValue in criterion_list:
+            criterion = criterionValue.get_criterion_name().name
+            item = criterionValue.get_item().get_name()
+            value = criterionValue.get_value().name
+
+            pref_table[criterion][item] = value
+
+        pref_table = pd.DataFrame(pref_table)
+        print('Preference table of ', self.get_name(), ':')
+        print(pref_table)
+        print('')
+
+    def generate_preferences(self, list_items: list[Item], map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]]):
+
+        criterion_list = list(list(map_item_criterion.items())[0][1].keys())
+
+        criterion_name_list = [CriterionName[x] for x in criterion_list]
+        np.random.shuffle(criterion_name_list)
+
+        self.preferences.set_criterion_name_list(criterion_name_list)
+
+        profiler = RandomIntervalProfile(map_item_criterion)
+
         for criterion in criterion_list:
-            criterion_name,max_value = criterion
-            p1p2p3 = [max_value*random.random() for i in range(3)]
-            p1p2p3.sort()
             for item in list_items:
-                real_value = item[criterion_name]
-                if real_value<p1p2p3[0]:
-                    value=Value.VERY_BAD
-                elif real_value<p1p2p3[1]:
-                    value=Value.BAD
-                elif real_value<p1p2p3[2]:
-                    value=Value.GOOD
-                else:
-                    value=Value.VERY_GOOD
-                self.add_criterion_value(CriterionValue(item, criterion_name, value))
+                value = profiler.get_value_from_data(
+                    item, CriterionName[criterion])
+                self.preferences.add_criterion_value(
+                    CriterionValue(item, CriterionName[criterion], value))
 
-class ArgumentModel (Model):
+
+class ArgumentModel(Model):
     """ ArgumentModel which inherit from Model .
     """
+
     def __init__(self):
         self.schedule = RandomActivation(self)
         self.__messages_service = MessageService(self.schedule)
 
-        # ICED 12330  6.3  3.8  4.8  65
-        # E    17100  0    3    2.2  48
+        itemCreator = ItemCreator_CSV()
+        items_list, map_item_criterion = itemCreator.create()
 
-        a = ArgumentAgent (id, "Agent A")
-        a.generate_preferences()
+        self.current_id = 0
+        a_pref = Preferences()
+        a = ArgumentAgent(unique_id=self.next_id(), model=self,
+                          name="Agent A", preferences=a_pref)
+        a.generate_preferences(items_list, map_item_criterion)
+        a.print_preference_table()
         self.schedule.add(a)
-        b = ArgumentAgent (id, "Agent B")
-        b.generate_preferences()
+
+        b_pref = Preferences()
+        b = ArgumentAgent(self.next_id(), self, "Agent B", b_pref)
+        b.generate_preferences(items_list, map_item_criterion)
         self.schedule.add(b)
 
         self.running = True
 
-    def step (self):
-        self.__messages_service.dispatch_messages ()
-        self.schedule.step ()
+    def step(self):
+        self.__messages_service.dispatch_messages()
+        self.schedule.step()
 
 
-if __name__ == " __main__ ":
-    argument_model = ArgumentModel ()
+if __name__ == "__main__":
+    model = ArgumentModel()
 
-    # To be completed
+    model.step()
