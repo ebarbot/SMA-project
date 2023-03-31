@@ -9,6 +9,8 @@ from preferences.Value import Value
 from preferences.Item import Item
 from preferences.CriterionValue import CriterionValue
 from message.MessageService import MessageService
+from message.Message import Message
+from message.MessagePerformative import MessagePerformative
 from typing import List, Type, Union
 import pandas as pd
 import numpy as np
@@ -22,9 +24,25 @@ class ArgumentAgent(CommunicatingAgent):
     def __init__(self, unique_id: int, model: Model, name: str, preferences: Preferences):
         super().__init__(unique_id, model, name)
         self.preferences = preferences
+        self.list_items: List[Item] = []
 
     def step(self):
         super().step()
+        if self.get_name() == "Agent 1":
+            item = self.preferences.most_preferred(self.list_items)
+            self.send_message(Message(self.get_name(), "Agent 2",
+                              MessagePerformative.PROPOSE, item))
+            print('Message de Agent 1 à Agent 2 : PROPOSE,', item)
+        if self.get_name() == "Agent 2":
+            nouveaux_messages = self.get_new_messages()
+            for message in nouveaux_messages:
+                exp = message.get_exp()
+                performative = message.get_performative()
+                item = message.get_content()
+                if performative == MessagePerformative.PROPOSE:
+                    self.send_message(Message(self.get_name(), "Agent 1",
+                                      MessagePerformative.ACCEPT, item))
+                    print('Message de Agent 2 à Agent 1 : ACCEPT,', item)
 
     def print_preference_table(self):
         criterion_list = self.preferences.get_criterion_value_list()
@@ -49,6 +67,7 @@ class ArgumentAgent(CommunicatingAgent):
 
     def generate_preferences(self, list_items: list[Item], map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]], verbose: bool = True):
 
+        self.list_items = list_items
         criterion_list = list(list(map_item_criterion.items())[0][1].keys())
 
         criterion_name_list = [CriterionName[x] for x in criterion_list]
@@ -57,7 +76,7 @@ class ArgumentAgent(CommunicatingAgent):
         self.preferences.set_criterion_name_list(criterion_name_list)
 
         profiler = RandomIntervalProfile(map_item_criterion, verbose)
-        #profiler = IntervalProfileCSV(map_item_criterion, verbose)
+        # profiler = IntervalProfileCSV(map_item_criterion, verbose)
 
         for criterion in criterion_list:
             for item in list_items:
@@ -105,4 +124,4 @@ class ArgumentModel(Model):
 if __name__ == "__main__":
     model = ArgumentModel()
 
-    model.run_n_steps(10)
+    model.run_n_steps(3)
