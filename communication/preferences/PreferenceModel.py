@@ -52,7 +52,7 @@ class IntervalProfileCSV(PreferenceModel):
 
 class RandomIntervalProfile(PreferenceModel):
 
-    def __init__(self,  map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]]) -> None:
+    def __init__(self,  map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]], verbose: bool = True) -> None:
         super().__init__()
         self.map_item_criterion = pd.DataFrame(map_item_criterion)
 
@@ -66,10 +66,11 @@ class RandomIntervalProfile(PreferenceModel):
 
         self.__get_profile()
 
-        print('Generated Random Profiles: ')
-        print('---------------------------')
-        print(pd.DataFrame(self.criterion_profile)[1:-1])
-        print('---------------------------')
+        if verbose:
+            print('Generated Random Profiles: ')
+            print('---------------------------')
+            print(pd.DataFrame(self.criterion_profile)[1:-1])
+            print('---------------------------')
 
     def __get_profile(self):
         self.criterion_profile = {}
