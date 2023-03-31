@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-from CriterionName import CriterionName
-from CriterionValue import CriterionValue
-from Item import Item
-from Value import Value
+from preferences.CriterionName import CriterionName
+from preferences.CriterionValue import CriterionValue
+from preferences.Item import Item
+from preferences.Value import Value
 from math import ceil
 import numpy as np
 
