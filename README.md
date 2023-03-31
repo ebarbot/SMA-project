@@ -15,6 +15,7 @@
     Message: This class represents the messages that are sent between agents. Each message has a sender, a receiver, a performative, and a content. The performative describes the purpose of the message, and the content contains the data being sent.
     MessagePerformative: This class represents the types of messages that can be sent between agents. The performative is used to describe the purpose of the message.
 
-## 🚀 To run the model, you need to create an instance of the ArgumentAgent class, passing in the required parameters. Once the agents have been created, the step function is called to simulate the communication between them.
+## Running 🚀 
+To run the model, you need to create an instance of the ArgumentAgent class, passing in the required parameters. Once the agents have been created, the step function is called to simulate the communication between them.
 
 ## 💻 The code is well-documented and has examples of how to create agents and run the simulation.
