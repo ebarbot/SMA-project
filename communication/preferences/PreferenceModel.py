@@ -21,13 +21,19 @@ class PreferenceModel(ABC):
 
 class IntervalProfileCSV(PreferenceModel):
 
-    def __init__(self,  map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]]) -> None:
+    def __init__(self,  map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]], verbose: bool = True) -> None:
         super().__init__()
         self.map_item_criterion = map_item_criterion
         self.profile_df = self.__get_profile()
 
+        if verbose:
+            print('Profiles: ')
+            print('---------------------------')
+            print(self.profile_df)
+            print('---------------------------')
+
     def __get_profile(self, filename: str = 'profiles.csv') -> pd.DataFrame:
-        return pd.read_csv(filename, sep=',', index_col='PROFILE')
+        return pd.read_csv(filename, sep=',', index_col='CRITERIA')
 
     def get_value_from_data(self, item: Item, criterion_name: CriterionName) -> Value:
 
@@ -39,9 +45,12 @@ class IntervalProfileCSV(PreferenceModel):
 
         value_list = sorted(value_list, key=lambda x: x[1].value)
 
-        profiles = self.profile_df[criterion_name.name].to_numpy()
+        profiles = self.profile_df.loc[criterion_name.name].to_numpy()
+        profiles = np.concatenate(
+            ([-np.inf], profiles, [np.inf]))
 
-        real_value = self.map_item_criterion[item.get_name()][criterion_name]
+        real_value = self.map_item_criterion[item.get_name(
+        )][criterion_name.name]
 
         value_idx = np.argwhere(real_value > profiles)[-1][0]
 
@@ -69,7 +78,8 @@ class RandomIntervalProfile(PreferenceModel):
         if verbose:
             print('Generated Random Profiles: ')
             print('---------------------------')
-            print(pd.DataFrame(self.criterion_profile)[1:-1])
+            print(pd.DataFrame(self.criterion_profile)[
+                  1:-1].transpose().rename(columns={i+1: f'P{i+1}' for i in range(len(self.value_list)-1)}))
             print('---------------------------')
 
     def __get_profile(self):

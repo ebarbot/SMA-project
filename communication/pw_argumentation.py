@@ -1,7 +1,7 @@
 from mesa import Model
 from mesa.time import RandomActivation
 from agent.CommunicatingAgent import CommunicatingAgent
-from preferences.PreferenceModel import RandomIntervalProfile
+from preferences.PreferenceModel import RandomIntervalProfile, IntervalProfileCSV
 from preferences.ItemFactory import ItemCreator_CSV
 from preferences.Preferences import Preferences
 from preferences.CriterionName import CriterionName
@@ -57,6 +57,7 @@ class ArgumentAgent(CommunicatingAgent):
         self.preferences.set_criterion_name_list(criterion_name_list)
 
         profiler = RandomIntervalProfile(map_item_criterion, verbose)
+        #profiler = IntervalProfileCSV(map_item_criterion, verbose)
 
         for criterion in criterion_list:
             for item in list_items:
