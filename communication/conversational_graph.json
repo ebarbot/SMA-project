@@ -14,15 +14,26 @@
             "id": "ACCEPT"
         },
         {
-            "id": "COMMIT",
+            "id": "COMMIT"
+        },
+        {
+            "id": "ACK",
             "final": true
         },
         {
-            "id": "ASK_WHY",
-            "final": true
+            "id": "ASK_WHY"
         },
         {
-            "id": "REJECT",
+            "id": "ARGUE"
+        },
+        {
+            "id": "INFORM_REF"
+        },
+        {
+            "id": "QUERY_REF"
+        },
+        {
+            "id": "FINISHED",
             "final": true
         }
     ],
@@ -33,7 +44,7 @@
         },
         {
             "source": "PROPOSE",
-            "target": "ASK_WHY"
+            "target": "ARGUE"
         },
         {
             "source": "ACCEPT",
@@ -41,7 +52,11 @@
         },
         {
             "source": "COMMIT",
-            "target": "COMMIT"
+            "target": "ACK"
+        },
+        {
+            "source": "ACK",
+            "target": "FINISHED"
         },
         {
             "source": "IDLE",

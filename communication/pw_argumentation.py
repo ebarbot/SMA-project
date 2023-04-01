@@ -1,7 +1,9 @@
+import copy
 from mesa import Model
 from mesa.time import RandomActivation
 
 from agent.CommunicatingAgent import CommunicatingAgent
+from conversational_model.FSM import FiniteStateMachine, Turn
 from preferences.PreferenceModel import RandomIntervalProfile, IntervalProfileCSV
 from preferences.ItemFactory import ItemCreator_CSV
 from preferences.Preferences import Preferences
@@ -14,86 +16,76 @@ from message.Message import Message
 from message.MessagePerformative import MessagePerformative
 from arguments.Argument import Argument
 
-from typing import List, Type, Union
+from typing import Callable, Dict, List, Type, Union
 import pandas as pd
 import numpy as np
 import random
+
+VERBOSE = 0
 
 
 class ArgumentAgent(CommunicatingAgent):
     """ ArgumentAgent which inherit from CommunicatingAgent .
     """
 
-    def __init__(self, unique_id: int, model: Model, name: str, preferences: Preferences):
+    def __init__(self, unique_id: int, model: Model, name: str, decision_function: Callable[[Message, MessagePerformative], Message], message_builder: Callable[[Message, MessagePerformative], Message]):
         super().__init__(unique_id, model, name)
-        self.preferences = preferences
+        self.preferences = Preferences(
+            lambda preferences, input, current_state, next_states: decision_function(
+                self, preferences, input, current_state, next_states),
+            lambda preferences, input, next_states: message_builder(self, preferences, input, next_states))
+
         self.list_items: List[Item] = []
+        self.known_agents: List[ArgumentAgent] = []
+        self.conversations: Dict[str, FiniteStateMachine] = {}
 
     def step(self):
         super().step()
-        if self.get_name() == "Agent 1":
-            nouveaux_messages = self.get_new_messages()
-            if nouveaux_messages == []:
-                item = self.preferences.most_preferred(self.list_items)
-                self.send_message(
-                    Message(self.get_name(), "Agent 2", MessagePerformative.PROPOSE, item))
-                print('Message de', self.get_name(),
-                      'à Agent 2 : PROPOSE,', item)
-            for message in nouveaux_messages:
-                exp = message.get_exp()
-                performative = message.get_performative()
-                item = message.get_content()
-                if performative == MessagePerformative.ACCEPT:
-                    self.send_message(
-                        Message(self.get_name(), exp, MessagePerformative.COMMIT, item))
-                    print('Message de', self.get_name(),
-                          'à', exp, ': COMMIT,', item)
-                elif performative == MessagePerformative.COMMIT:
-                    if item in self.list_items:
-                        self.list_items.remove(item)
-                        self.send_message(
-                            Message(self.get_name(), exp, MessagePerformative.COMMIT, item))
-                        print('Message de', self.get_name(),
-                              'à', exp, ': COMMIT,', item)
-                    else:
-                        self.send_message(
-                            Message(self.get_name(), exp, MessagePerformative.ARGUE, item))
-                        print('Message de', self.get_name(),
-                              'à', exp, ': ARGUE,', item)
-                elif performative == MessagePerformative.ASK_WHY:
-                    # A1 to A2: argue(item, premisses)
-                    best_argument = self.support_proposal(item)
-                    self.send_message(
-                        Message(self.get_name(), exp, MessagePerformative.ARGUE, best_argument))
-        if self.get_name() == "Agent 2":
-            nouveaux_messages = self.get_new_messages()
-            for message in nouveaux_messages:
-                exp = message.get_exp()
-                performative = message.get_performative()
-                item = message.get_content()
-                if performative == MessagePerformative.PROPOSE:
-                    if self.preferences.is_item_among_top_10_percent(item, self.list_items):
-                        self.send_message(
-                            Message(self.get_name(), exp, MessagePerformative.ACCEPT, item))
-                        print('Message de', self.get_name(),
-                              'à', exp, ': ACCEPT,', item)
-                    else:
-                        self.send_message(
-                            Message(self.get_name(), exp, MessagePerformative.ASK_WHY, item))
-                        print('Message de', self.get_name(),
-                              'à', exp, ': ASK_WHY,', item)
-                elif performative == MessagePerformative.COMMIT:
-                    if item in self.list_items:
-                        self.list_items.remove(item)
-                        self.send_message(
-                            Message(self.get_name(), exp, MessagePerformative.COMMIT, item))
-                        print('Message de', self.get_name(),
-                              'à', exp, ': COMMIT,', item)
-                    else:
-                        self.send_message(
-                            Message(self.get_name(), exp, MessagePerformative.ARGUE, item))
-                        print('Message de', self.get_name(),
-                              'à', exp, ': ARGUE,', item)
+        nouveaux_messages = self.get_new_messages()
+        for new_message in nouveaux_messages:
+            exp = new_message.get_exp()
+            if exp not in self.conversations:
+                self.conversations[exp] = FiniteStateMachine(
+                    self.get_name(), exp, verbose=VERBOSE)
+
+            self.conversations[exp].step(
+                input=new_message)
+            self.conversations[exp].step(
+                input=new_message, preferences=self.preferences)
+
+        self.init_conversation()
+
+    def reset_conversation(self):
+        finished_talking = [
+            conversation for conversation in self.conversations.values() if conversation.has_finished()]
+
+        for conversation in finished_talking:
+            conversation.reset()
+
+    def init_conversation(self):
+        continuous_talkings = [
+            conversation for conversation, fsm in self.conversations.items() if not fsm.is_start()]
+
+        finished_talking = [
+            conversation for conversation, fsm in self.conversations.items() if fsm.has_finished()]
+
+        continuous_talkings = list(
+            set(continuous_talkings) - set(finished_talking))
+
+        possible_choices = [agent for agent in self.model.schedule.agents if agent.get_name(
+        ) not in continuous_talkings and agent.get_name() != self.get_name()]
+
+        if VERBOSE >= 1:
+            print('possible_choices', [x.get_name()
+                                       for x in possible_choices], 'agent: ', self.get_name())
+            print('self.conversations', self.conversations)
+        if len(possible_choices) == 0:
+            return
+        chosen_agent = np.random.choice(possible_choices, 1, replace=False)[0]
+        self.conversations[chosen_agent.get_name()] = FiniteStateMachine(
+            self.get_name(), chosen_agent.get_name(), verbose=VERBOSE)
+        self.conversations[chosen_agent.get_name()].step(input=Message(
+            self.get_name(), chosen_agent.get_name(), MessagePerformative.IDLE, None), preferences=self.preferences)
 
     def print_preference_table(self):
         criterion_list = self.preferences.get_criterion_value_list()
@@ -114,16 +106,16 @@ class ArgumentAgent(CommunicatingAgent):
         pref_table = pd.DataFrame(pref_table)
         print('Preference table of ', self.get_name(), ':')
         print(pref_table)
-        print('')
 
-    def generate_preferences(self, list_items: list[Item], map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]], verbose: bool = True):
+    def generate_preferences(self, list_items: list[Item], map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]], verbose: int = 0):
 
         self.list_items = list_items
         criterion_list = list(list(map_item_criterion.items())[0][1].keys())
 
         criterion_name_list = [CriterionName[x] for x in criterion_list]
         np.random.shuffle(criterion_name_list)
-
+        """_summary_
+        """
         self.preferences.set_criterion_name_list(criterion_name_list)
 
         profiler = RandomIntervalProfile(map_item_criterion, verbose)
@@ -136,7 +128,7 @@ class ArgumentAgent(CommunicatingAgent):
                 self.preferences.add_criterion_value(
                     CriterionValue(item, CriterionName[criterion], value))
 
-        if verbose:
+        if verbose == 2:
             self.print_preference_table()
 
     def support_proposal(self, item):
@@ -151,6 +143,54 @@ class ArgumentAgent(CommunicatingAgent):
         # les arguments sont ordonnés dans la liste
         best_argument.add_premiss_couple_values(list_arguments[0])
         return best_argument
+
+
+def agent_decision_builder(agent: ArgumentAgent, preferences: Preferences, input: Message, current_state: MessagePerformative, next_states: List[MessagePerformative]) -> MessagePerformative:
+    if current_state == MessagePerformative.IDLE:
+        # return MessagePerformative.PROPOSE
+        # return np.random.choice([MessagePerformative.PROPOSE, MessagePerformative.IDLE], p=[0.1, 0.9])
+        if len(agent.list_items) > 0:
+            return np.random.choice(next_states, p=[0.5, 0.5])
+        return MessagePerformative.IDLE
+
+    if current_state == MessagePerformative.PROPOSE:
+        return MessagePerformative.ACCEPT
+        item = input.get_content()
+        if item in agent.list_items:
+            return MessagePerformative.ACCEPT
+        else:
+            return MessagePerformative.ARGUE
+
+
+def agent_message_builder(agent: ArgumentAgent, preferences: Preferences, input: Message, next_state: MessagePerformative) -> Message:
+
+    if next_state == MessagePerformative.COMMIT:
+        item = input.get_content()
+        agent.list_items.remove(item)
+
+    if next_state == MessagePerformative.PROPOSE:
+        item = preferences.most_preferred(agent.list_items)
+        chosen_agent_name = input.get_dest()
+        chosen_agent: CommunicatingAgent = [
+            x for x in agent.model.schedule.agents if x.get_name() == chosen_agent_name][0]
+        message = Message(agent.get_name(),
+                          chosen_agent.get_name(), next_state, item)
+        agent.send_message(message)
+        return message
+
+    if next_state == MessagePerformative.IDLE:
+        return None
+
+    if next_state == MessagePerformative.FINISHED:
+        return None
+
+    exp = input.get_dest()
+    dest = input.get_exp()
+    item = input.get_content()
+    message = Message(exp, dest, next_state, item)
+    agent.send_message(message)
+
+    return message
 
 
 class ArgumentModel(Model):
@@ -168,13 +208,13 @@ class ArgumentModel(Model):
         for i in range(num_agents):
             new_agent = self.__create_agent()
             new_agent.generate_preferences(
-                items_list, map_item_criterion, verbose=True)
+                copy.deepcopy(items_list), copy.deepcopy(map_item_criterion), verbose=VERBOSE)
             self.schedule.add(new_agent)
 
         self.running = True
 
     def __create_agent(self) -> ArgumentAgent:
-        return ArgumentAgent(self.next_id(), self, "Agent " + str(self.current_id), Preferences())
+        return ArgumentAgent(self.next_id(), self, "Agent " + str(self.current_id), agent_decision_builder, agent_message_builder)
 
     def step(self):
         self.__messages_service.dispatch_messages()
@@ -188,4 +228,4 @@ class ArgumentModel(Model):
 if __name__ == "__main__":
     model = ArgumentModel()
 
-    model.run_n_steps(3)
+    model.run_n_steps(50)

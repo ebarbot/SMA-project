@@ -10,7 +10,6 @@ import numpy as np
 
 import sys
 import os
-print(os.getcwd())
 sys.path.append(os.getcwd())
 from message.Message import Message  # nopep8
 from message.MessagePerformative import MessagePerformative  # nopep8
