@@ -1,8 +1,12 @@
 {
-    "directed": false,
+    "directed": true,
     "multigraph": false,
     "graph": {},
     "nodes": [
+        {
+            "id": "IDLE",
+            "initial": true
+        },
         {
             "id": "PROPOSE"
         },
@@ -10,10 +14,16 @@
             "id": "ACCEPT"
         },
         {
-            "id": "COMMIT"
+            "id": "COMMIT",
+            "final": true
         },
         {
-            "id": "ASK_WHY"
+            "id": "ASK_WHY",
+            "final": true
+        },
+        {
+            "id": "REJECT",
+            "final": true
         }
     ],
     "links": [
@@ -32,6 +42,14 @@
         {
             "source": "COMMIT",
             "target": "COMMIT"
+        },
+        {
+            "source": "IDLE",
+            "target": "PROPOSE"
+        },
+        {
+            "source": "IDLE",
+            "target": "IDLE"
         }
     ]
 }

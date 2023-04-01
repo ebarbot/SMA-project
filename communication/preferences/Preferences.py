@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 
+from typing import Callable, List
 from preferences.CriterionName import CriterionName
 from preferences.CriterionValue import CriterionValue
 from preferences.Item import Item
 from preferences.Value import Value
 from math import ceil
 import numpy as np
+
+import sys
+import os
+print(os.getcwd())
+sys.path.append(os.getcwd())
+from message.Message import Message  # nopep8
+from message.MessagePerformative import MessagePerformative  # nopep8
 
 
 class Preferences(object):
@@ -17,11 +25,25 @@ class Preferences(object):
         criterion_value_list: the list of criterion value
     """
 
-    def __init__(self):
+    def __init__(self, decision_function: Callable[[Message, MessagePerformative], Message], message_builder: Callable[[Message, MessagePerformative], Message]):
         """Creates a new Preferences object.
         """
         self.__criterion_name_list: list[CriterionName] = []
         self.__criterion_value_list: list[CriterionValue] = []
+        self.__decide: Callable[[Preferences,
+                                 Message,
+                                 MessagePerformative,
+                                 List[MessagePerformative]], MessagePerformative] = decision_function
+
+        self.__build_message: Callable[[Preferences,
+                                        Message,
+                                        MessagePerformative], MessagePerformative] = message_builder
+
+    def decide(self, input: Message, current_state: MessagePerformative, next_states: List[MessagePerformative]) -> MessagePerformative:
+        return self.__decide(self, input, current_state, next_states)
+
+    def build_message(self, input: Message, next_state: MessagePerformative) -> Message:
+        return self.__build_message(self, input, next_state)
 
     def get_criterion_name_list(self) -> list[CriterionName]:
         """Returns the list of criterion name.
