@@ -33,6 +33,10 @@
             "id": "QUERY_REF"
         },
         {
+            "id": "REJECT",
+            "final": true
+        },
+        {
             "id": "FINISHED",
             "final": true
         }
@@ -44,7 +48,31 @@
         },
         {
             "source": "PROPOSE",
+            "target": "ASK_WHY"
+        },
+        {
+            "source": "PROPOSE",
+            "target": "REJECT"
+        },
+        {
+            "source": "ASK_WHY",
             "target": "ARGUE"
+        },
+        {
+            "source": "ARGUE",
+            "target": "ARGUE"
+        },
+        {
+            "source": "ARGUE",
+            "target": "REJECT"
+        },
+        {
+            "source": "ARGUE",
+            "target": "ACCEPT"
+        },
+        {
+            "source": "REJECT",
+            "target": "FINISHED"
         },
         {
             "source": "ACCEPT",

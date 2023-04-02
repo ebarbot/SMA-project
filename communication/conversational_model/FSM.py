@@ -106,7 +106,7 @@ class FiniteStateMachine(FiniteStateMachineBase):
             (a[0].startswith('__') and a[0].endswith('__')) or 'name' in a[0] or 'value' in a[0])]))
 
         nodes = sorted([node['id'] for node in graph_data['nodes']])
-        assert nodes == performatives, f'Performatives in graph do not match those in MessagePerformative: {nodes} != {performatives}'
+        assert nodes == performatives, f'Performatives in graph do not match those in MessagePerformative: {[x for x in nodes if x not in performatives]} - {[x for x in performatives if x not in nodes]}'
 
     def step(self, input: Message = None, preferences: Preferences = None):
         if preferences:
@@ -151,9 +151,6 @@ class FiniteStateMachine(FiniteStateMachineBase):
         self.turn = Turn.Me
 
     def has_finished(self) -> bool:
-        if self.verbose >= 1:
-            print(
-                f'has_finised: {self.current_state} {self.final_states} {self.current_state in self.final_states} {self.turn == Turn.Other}')
         return self.current_state in self.final_states and self.turn == Turn.Other
 
     def is_start(self) -> bool:

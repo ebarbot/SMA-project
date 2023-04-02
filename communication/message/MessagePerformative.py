@@ -10,6 +10,7 @@ class MessagePerformative(Enum):
     IDLE = 0
     FINISHED = 1
     ACK = 2
+    REJECT = 3
     PROPOSE = 101
     ACCEPT = 102
     COMMIT = 103

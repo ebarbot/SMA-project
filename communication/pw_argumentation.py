@@ -36,7 +36,7 @@ class ArgumentAgent(CommunicatingAgent):
             lambda preferences, input, next_states: message_builder(self, preferences, input, next_states))
 
         self.list_items: List[Item] = []
-        self.known_agents: List[ArgumentAgent] = []
+        self.bag: List[ArgumentAgent] = []
         self.conversations: Dict[str, FiniteStateMachine] = {}
 
     def step(self):
@@ -62,6 +62,9 @@ class ArgumentAgent(CommunicatingAgent):
         for conversation in finished_talking:
             conversation.reset()
 
+    def set_bag(self, bag: List[Item]):
+        self.bag = bag
+
     def init_conversation(self):
         continuous_talkings = [
             conversation for conversation, fsm in self.conversations.items() if not fsm.is_start()]
@@ -82,8 +85,11 @@ class ArgumentAgent(CommunicatingAgent):
         if len(possible_choices) == 0:
             return
         chosen_agent = np.random.choice(possible_choices, 1, replace=False)[0]
-        self.conversations[chosen_agent.get_name()] = FiniteStateMachine(
-            self.get_name(), chosen_agent.get_name(), verbose=VERBOSE)
+
+        if chosen_agent not in self.conversations:
+            self.conversations[chosen_agent.get_name()] = FiniteStateMachine(
+                self.get_name(), chosen_agent.get_name(), verbose=VERBOSE)
+
         self.conversations[chosen_agent.get_name()].step(input=Message(
             self.get_name(), chosen_agent.get_name(), MessagePerformative.IDLE, None), preferences=self.preferences)
 
@@ -105,6 +111,7 @@ class ArgumentAgent(CommunicatingAgent):
 
         pref_table = pd.DataFrame(pref_table)
         print('Preference table of ', self.get_name(), ':')
+        print('Bag: ', [x.get_name() for x in self.bag])
         print(pref_table)
 
     def generate_preferences(self, list_items: list[Item], map_item_criterion: dict[Item, dict[CriterionName, Union[int, float]]], verbose: int = 0):
@@ -118,8 +125,8 @@ class ArgumentAgent(CommunicatingAgent):
         """
         self.preferences.set_criterion_name_list(criterion_name_list)
 
-        profiler = RandomIntervalProfile(map_item_criterion, verbose)
-        # profiler = IntervalProfileCSV(map_item_criterion, verbose)
+        #profiler = RandomIntervalProfile(map_item_criterion, verbose)
+        profiler = IntervalProfileCSV(map_item_criterion, verbose)
 
         for criterion in criterion_list:
             for item in list_items:
@@ -137,11 +144,28 @@ class ArgumentAgent(CommunicatingAgent):
         : param item : str - name of the item which was proposed
         : return : string - the strongest supportive argument
         """
-        list_arguments = Argument.List_supporting_proposal(
-            item, self.preferences)
         best_argument = Argument(True, item)
+        item = [x for x in self.list_items if x.get_name() == item][0]
+        list_arguments = best_argument.list_supporting_proposal(
+            item, self.preferences)
         # les arguments sont ordonnés dans la liste
-        best_argument.add_premiss_couple_values(list_arguments[0])
+        best_argument.add_premiss_couple_values(
+            list_arguments[0].criterion_name, list_arguments[0].value)
+        return best_argument
+
+    def attack_proposal(self, item):
+        """
+        Used when the agent receives " ASK_WHY " after having proposed an item
+        : param item : str - name of the item which was proposed
+        : return : string - the strongest supportive argument
+        """
+        best_argument = Argument(True, item)
+        item = [x for x in self.list_items if x.get_name() == item][0]
+        list_arguments = best_argument.list_attacking_proposal(
+            item, self.preferences)
+        # les arguments sont ordonnés dans la liste
+        best_argument.add_premiss_couple_values(
+            list_arguments[0].criterion_name, list_arguments[0].value)
         return best_argument
 
 
@@ -149,32 +173,65 @@ def agent_decision_builder(agent: ArgumentAgent, preferences: Preferences, input
     if current_state == MessagePerformative.IDLE:
         # return MessagePerformative.PROPOSE
         # return np.random.choice([MessagePerformative.PROPOSE, MessagePerformative.IDLE], p=[0.1, 0.9])
-        if len(agent.list_items) > 0:
+        if len(agent.bag) > 0:
             return np.random.choice(next_states, p=[0.5, 0.5])
         return MessagePerformative.IDLE
 
     if current_state == MessagePerformative.PROPOSE:
+        item_name = input.get_content()
+        if item_name in [x.get_name() for x in agent.bag]:
+            return MessagePerformative.REJECT
+
+        item = [x for x in agent.list_items if x.get_name() == item_name][0]
+        list_attacking = Argument(True, item).list_attacking_proposal(
+            item, agent.preferences)
+
+        if len(list_attacking) > 0:
+            return MessagePerformative.ASK_WHY
+
         return MessagePerformative.ACCEPT
-        item = input.get_content()
-        if item in agent.list_items:
-            return MessagePerformative.ACCEPT
-        else:
-            return MessagePerformative.ARGUE
+
+    if current_state == MessagePerformative.ARGUE:
+        return MessagePerformative.ACCEPT
 
 
 def agent_message_builder(agent: ArgumentAgent, preferences: Preferences, input: Message, next_state: MessagePerformative) -> Message:
 
     if next_state == MessagePerformative.COMMIT:
+        item_name: Union[Argument, Item] = input.get_content()
+        if isinstance(item_name, Argument):
+            item_name = item_name.item
+        elif isinstance(item_name, Item):
+            item_name = item_name.get_name()
+        else:
+            raise Exception('item_name is not an Argument or an Item')
+
+        item = [x for x in agent.bag if x.get_name() == item_name][0]
+        agent.bag.remove(item)
+
+    if next_state == MessagePerformative.ARGUE:
+        argument: Argument = input.get_content()
+        argument = agent.support_proposal(argument.item)
+        message = Message(agent.get_name(),
+                          input.get_exp(), next_state, argument)
+        agent.send_message(message)
+        return message
+
+    if next_state == MessagePerformative.ASK_WHY:
         item = input.get_content()
-        agent.list_items.remove(item)
+        argument = agent.attack_proposal(item)
+        message = Message(agent.get_name(),
+                          input.get_exp(), next_state, argument)
+        agent.send_message(message)
+        return message
 
     if next_state == MessagePerformative.PROPOSE:
-        item = preferences.most_preferred(agent.list_items)
+        item = preferences.most_preferred(agent.bag)
         chosen_agent_name = input.get_dest()
         chosen_agent: CommunicatingAgent = [
             x for x in agent.model.schedule.agents if x.get_name() == chosen_agent_name][0]
         message = Message(agent.get_name(),
-                          chosen_agent.get_name(), next_state, item)
+                          chosen_agent.get_name(), next_state, item.get_name())
         agent.send_message(message)
         return message
 
@@ -186,8 +243,8 @@ def agent_message_builder(agent: ArgumentAgent, preferences: Preferences, input:
 
     exp = input.get_dest()
     dest = input.get_exp()
-    item = input.get_content()
-    message = Message(exp, dest, next_state, item)
+    content = input.get_content()
+    message = Message(exp, dest, next_state, content)
     agent.send_message(message)
 
     return message
@@ -207,8 +264,10 @@ class ArgumentModel(Model):
         self.current_id = 0
         for i in range(num_agents):
             new_agent = self.__create_agent()
+            new_agent.set_bag(list(np.array(copy.deepcopy(items_list))[np.random.randint(
+                0, len(items_list), size=np.random.randint(len(items_list), size=1))]))
             new_agent.generate_preferences(
-                copy.deepcopy(items_list), copy.deepcopy(map_item_criterion), verbose=VERBOSE)
+                copy.deepcopy(items_list), copy.deepcopy(map_item_criterion), verbose=2)
             self.schedule.add(new_agent)
 
         self.running = True
@@ -228,4 +287,4 @@ class ArgumentModel(Model):
 if __name__ == "__main__":
     model = ArgumentModel()
 
-    model.run_n_steps(50)
+    model.run_n_steps(20)
