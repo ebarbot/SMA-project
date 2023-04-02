@@ -1,8 +1,12 @@
 {
-    "directed": false,
+    "directed": true,
     "multigraph": false,
     "graph": {},
     "nodes": [
+        {
+            "id": "IDLE",
+            "initial": true
+        },
         {
             "id": "PROPOSE"
         },
@@ -13,7 +17,28 @@
             "id": "COMMIT"
         },
         {
+            "id": "ACK",
+            "final": true
+        },
+        {
             "id": "ASK_WHY"
+        },
+        {
+            "id": "ARGUE"
+        },
+        {
+            "id": "INFORM_REF"
+        },
+        {
+            "id": "QUERY_REF"
+        },
+        {
+            "id": "REJECT",
+            "final": true
+        },
+        {
+            "id": "FINISHED",
+            "final": true
         }
     ],
     "links": [
@@ -26,12 +51,52 @@
             "target": "ASK_WHY"
         },
         {
+            "source": "PROPOSE",
+            "target": "REJECT"
+        },
+        {
+            "source": "ASK_WHY",
+            "target": "ARGUE"
+        },
+        {
+            "source": "ARGUE",
+            "target": "ARGUE"
+        },
+        {
+            "source": "ARGUE",
+            "target": "REJECT"
+        },
+        {
+            "source": "ARGUE",
+            "target": "ACCEPT"
+        },
+        {
+            "source": "REJECT",
+            "target": "FINISHED"
+        },
+        {
+            "source": "ACCEPT",
+            "target": "REJECT"
+        },
+        {
             "source": "ACCEPT",
             "target": "COMMIT"
         },
         {
             "source": "COMMIT",
-            "target": "COMMIT"
+            "target": "ACK"
+        },
+        {
+            "source": "ACK",
+            "target": "FINISHED"
+        },
+        {
+            "source": "IDLE",
+            "target": "PROPOSE"
+        },
+        {
+            "source": "IDLE",
+            "target": "IDLE"
         }
     ]
 }

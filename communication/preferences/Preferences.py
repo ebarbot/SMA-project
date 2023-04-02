@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 
+from typing import Callable, List
 from preferences.CriterionName import CriterionName
 from preferences.CriterionValue import CriterionValue
 from preferences.Item import Item
 from preferences.Value import Value
 from math import ceil
 import numpy as np
+
+import sys
+import os
+sys.path.append(os.getcwd())
+from message.Message import Message  # nopep8
+from message.MessagePerformative import MessagePerformative  # nopep8
 
 
 class Preferences(object):
@@ -17,11 +24,25 @@ class Preferences(object):
         criterion_value_list: the list of criterion value
     """
 
-    def __init__(self):
+    def __init__(self, decision_function: Callable[[Message, MessagePerformative], Message], message_builder: Callable[[Message, MessagePerformative], Message]):
         """Creates a new Preferences object.
         """
         self.__criterion_name_list: list[CriterionName] = []
         self.__criterion_value_list: list[CriterionValue] = []
+        self.__decide: Callable[[Preferences,
+                                 Message,
+                                 MessagePerformative,
+                                 List[MessagePerformative]], MessagePerformative] = decision_function
+
+        self.__build_message: Callable[[Preferences,
+                                        Message,
+                                        MessagePerformative], MessagePerformative] = message_builder
+
+    def decide(self, input: Message, current_state: MessagePerformative, next_states: List[MessagePerformative]) -> MessagePerformative:
+        return self.__decide(self, input, current_state, next_states)
+
+    def build_message(self, input: Message, next_state: MessagePerformative) -> Message:
+        return self.__build_message(self, input, next_state)
 
     def get_criterion_name_list(self) -> list[CriterionName]:
         """Returns the list of criterion name.
@@ -47,7 +68,7 @@ class Preferences(object):
         """Gets the value for a given item and a given criterion name.
         """
         for value in self.__criterion_value_list:
-            if value.get_item() == item and value.get_criterion_name() == criterion_name:
+            if value.get_item().get_name() == item.get_name() and value.get_criterion_name() == criterion_name:
                 return value.get_value()
         return None
 
@@ -65,17 +86,14 @@ class Preferences(object):
         """
         return item_1.get_score(self) > item_2.get_score(self)
 
-    def sort_items(self, item_list: list[Item]) -> list[Item]:
-        liste = [(item.get_score(self), item) for item in item_list]
-        liste.sort(reverse=True)
-        return liste
-
     def most_preferred(self, item_list: list[Item]) -> Item:
         """Returns the most preferred item from a list.
         """
-        sorted_list = self.sort_items(item_list)
-        max_val = sorted_list[0][0]
-        return np.random.choice([item[1] for item in sorted_list if item[0] == max_val])
+        liste = [(item.get_score(self), item) for item in item_list]
+        max_val = liste[0][0]
+        for val in liste:
+            max_val = max(max_val, val[0])
+        return np.random.choice([item[1] for item in liste if item[0] == max_val])
 
     def is_item_among_top_10_percent(self, item: Item, item_list: list[Item]) -> bool:
         """
