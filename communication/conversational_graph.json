@@ -76,6 +76,10 @@
         },
         {
             "source": "ACCEPT",
+            "target": "REJECT"
+        },
+        {
+            "source": "ACCEPT",
             "target": "COMMIT"
         },
         {

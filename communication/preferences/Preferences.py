@@ -86,17 +86,14 @@ class Preferences(object):
         """
         return item_1.get_score(self) > item_2.get_score(self)
 
-    def sort_items(self, item_list: list[Item]) -> list[Item]:
-        liste = [(item.get_score(self), item) for item in item_list]
-        liste.sort(reverse=True)
-        return liste
-
     def most_preferred(self, item_list: list[Item]) -> Item:
         """Returns the most preferred item from a list.
         """
-        sorted_list = self.sort_items(item_list)
-        max_val = sorted_list[0][0]
-        return np.random.choice([item[1] for item in sorted_list if item[0] == max_val])
+        liste = [(item.get_score(self), item) for item in item_list]
+        max_val = liste[0][0]
+        for val in liste:
+            max_val = max(max_val, val[0])
+        return np.random.choice([item[1] for item in liste if item[0] == max_val])
 
     def is_item_among_top_10_percent(self, item: Item, item_list: list[Item]) -> bool:
         """

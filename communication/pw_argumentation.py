@@ -41,6 +41,7 @@ class ArgumentAgent(CommunicatingAgent):
 
     def step(self):
         super().step()
+        print(f'Agent {self.get_name()} has: ', [str(x) for x in self.bag])
         nouveaux_messages = self.get_new_messages()
         for new_message in nouveaux_messages:
             exp = new_message.get_exp()
@@ -125,8 +126,8 @@ class ArgumentAgent(CommunicatingAgent):
         """
         self.preferences.set_criterion_name_list(criterion_name_list)
 
-        #profiler = RandomIntervalProfile(map_item_criterion, verbose)
-        profiler = IntervalProfileCSV(map_item_criterion, verbose)
+        profiler = RandomIntervalProfile(map_item_criterion, verbose)
+        # profiler = IntervalProfileCSV(map_item_criterion, verbose)
 
         for criterion in criterion_list:
             for item in list_items:
@@ -191,20 +192,31 @@ def agent_decision_builder(agent: ArgumentAgent, preferences: Preferences, input
 
         return MessagePerformative.ACCEPT
 
+    if current_state == MessagePerformative.ACCEPT:
+        item_name: Union[Argument, Item, str] = input.get_content()
+        item = [x for x in agent.bag if x.get_name() == item_name]
+        if len(item) == 0:
+            return MessagePerformative.REJECT
+        return MessagePerformative.COMMIT
+
     if current_state == MessagePerformative.ARGUE:
         return MessagePerformative.ACCEPT
 
 
 def agent_message_builder(agent: ArgumentAgent, preferences: Preferences, input: Message, next_state: MessagePerformative) -> Message:
 
+    if next_state == MessagePerformative.IDLE or next_state == MessagePerformative.FINISHED:
+        return None
+
     if next_state == MessagePerformative.COMMIT:
-        item_name: Union[Argument, Item] = input.get_content()
+        item_name: Union[Argument, Item, str] = input.get_content()
         if isinstance(item_name, Argument):
             item_name = item_name.item
         elif isinstance(item_name, Item):
             item_name = item_name.get_name()
-        else:
-            raise Exception('item_name is not an Argument or an Item')
+        elif not isinstance(item_name, str):
+            raise Exception(
+                'item_name should be a string, an Argument or an Item')
 
         item = [x for x in agent.bag if x.get_name() == item_name][0]
         agent.bag.remove(item)
@@ -235,11 +247,18 @@ def agent_message_builder(agent: ArgumentAgent, preferences: Preferences, input:
         agent.send_message(message)
         return message
 
-    if next_state == MessagePerformative.IDLE:
-        return None
+    if next_state == MessagePerformative.ACK:
+        item_name: Union[Argument, Item, str] = input.get_content()
+        if isinstance(item_name, Argument):
+            item_name = item_name.item
+        elif isinstance(item_name, Item):
+            item_name = item_name.get_name()
+        elif not isinstance(item_name, str):
+            raise Exception(
+                'item_name should be a string, an Argument or an Item')
 
-    if next_state == MessagePerformative.FINISHED:
-        return None
+        item = [x for x in agent.list_items if x.get_name() == item_name][0]
+        agent.bag.append(copy.deepcopy(item))
 
     exp = input.get_dest()
     dest = input.get_exp()
@@ -281,10 +300,11 @@ class ArgumentModel(Model):
 
     def run_n_steps(self, n: int):
         for _ in range(n):
+            print('-'*80)
             self.step()
 
 
 if __name__ == "__main__":
-    model = ArgumentModel()
+    model = ArgumentModel(num_agents=5)
 
     model.run_n_steps(20)
