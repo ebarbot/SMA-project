@@ -17,5 +17,4 @@
 
 ## Running 🚀 
 To run the model, you need to create an instance of the ArgumentAgent class, passing in the required parameters. Once the agents have been created, the step function is called to simulate the communication between them.
-
-## 💻 The code is well-documented and has examples of how to create agents and run the simulation.
+The code is well-documented and has examples of how to create agents and run the simulation.
