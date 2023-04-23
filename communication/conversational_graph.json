@@ -72,7 +72,7 @@
         },
         {
             "source": "REJECT",
-            "target": "FINISHED"
+            "target": "IDLE"
         },
         {
             "source": "ACCEPT",
@@ -88,7 +88,7 @@
         },
         {
             "source": "ACK",
-            "target": "FINISHED"
+            "target": "IDLE"
         },
         {
             "source": "IDLE",

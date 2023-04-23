@@ -6,7 +6,7 @@ from preferences.CriterionValue import CriterionValue
 
 
 class CoupleValue:
-    """ CoupleValue class .
+    """CoupleValue class .
     This class implements a couple value used in argument object .
 
     attr :
@@ -15,10 +15,9 @@ class CoupleValue:
     """
 
     def __init__(self, criterion_name: CriterionName, value: CriterionValue) -> None:
-        """ Creates a new couple value .
-        """
+        """Creates a new couple value ."""
         self.criterion_name = criterion_name
         self.value = value
 
     def __str__(self) -> str:
-        return f'({self.criterion_name.name}, {self.value.name})'
+        return f"({self.criterion_name.name} = {self.value.name})"
