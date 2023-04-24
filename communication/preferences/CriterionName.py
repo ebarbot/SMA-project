@@ -6,13 +6,13 @@ class CriterionName(Enum):
     Enumeration containing the possible CriterionName.
     """
 
-    PRODUCTION_COST = 0
-    CONSUMPTION = 1
-    DURABILITY = 2
-    ENVIRONMENT_IMPACT = 3
-    NOISE = 4
+    DIFFICULTY = 0
+    PROFESSOR = 1
+    EVALUATION = 2
+    CV_BUILDING = 3
+    FLEXIBLE = 4
 
-    __POSITIVE_CRITERION = [2]
+    __POSITIVE_CRITERION = [1, 3, 4]
 
     @staticmethod
     def is_positive_criterion(criterion: "CriterionName") -> bool:

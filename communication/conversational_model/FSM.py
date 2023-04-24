@@ -12,6 +12,7 @@ import pprint
 
 import sys
 import os
+
 sys.path.append(os.getcwd())
 from message.Message import Message  # nopep8
 from message.MessagePerformative import MessagePerformative  # nopep8
@@ -38,7 +39,6 @@ class ConversationalGraph(TypedDict):
 
 
 class FiniteStateMachineBase(ABC):
-
     def __init__(self) -> None:
         super().__init__()
 
@@ -61,10 +61,16 @@ class Turn:
 
 
 class FiniteStateMachine(FiniteStateMachineBase):
-    def __init__(self, agent_a: str, agent_b: str, path: str = '.', filename: str = 'conversational_graph.json', verbose: int = 0) -> None:
-
+    def __init__(
+        self,
+        agent_a: str,
+        agent_b: str,
+        path: str = ".",
+        filename: str = "conversational_graph.json",
+        verbose: int = 0,
+    ) -> None:
         filename = Path(path) / Path(filename)
-        with open(filename, 'r') as json_file:
+        with open(filename, "r") as json_file:
             graph_data: ConversationalGraph = json.load(json_file)
 
         self.graph = json_graph.node_link_graph(graph_data)
@@ -72,13 +78,17 @@ class FiniteStateMachine(FiniteStateMachineBase):
         self.__sanity_check(graph_data)
 
         initial_states = [
-            node['id'] for node in graph_data['nodes'] if 'initial' in node]
+            node["id"] for node in graph_data["nodes"] if "initial" in node
+        ]
 
         final_states = [
-            MessagePerformative[node['id']] for node in graph_data['nodes'] if 'final' in node]
+            MessagePerformative[node["id"]]
+            for node in graph_data["nodes"]
+            if "final" in node
+        ]
 
         # TODO: Could there be more than one initial state?
-        assert len(initial_states) == 1, 'More than one initial state'
+        assert len(initial_states) == 1, "More than one initial state"
 
         self.initial_state: MessagePerformative = MessagePerformative[initial_states[0]]
         self.final_states: List[MessagePerformative] = final_states
@@ -89,24 +99,38 @@ class FiniteStateMachine(FiniteStateMachineBase):
         self.verbose = verbose
 
         if self.verbose == 2:
-            print('-' * 80)
-            print('Graph data: ')
+            print("-" * 80)
+            print("Graph data: ")
             pprint.pprint(graph_data)
-            print('-' * 80)
+            print("-" * 80)
 
-            plt.figure(1, figsize=(5, 5))
-            nx.draw(self.graph, with_labels=True)
-            plt.show()
+        plt.figure(1, figsize=(5, 5))
+        nx.draw(self.graph, pos=nx.circular_layout(self.graph), with_labels=True)
+        plt.savefig("conversational_graph.png")
 
     def __sanity_check(self, graph_data):
         attributes = inspect.getmembers(
-            MessagePerformative, lambda a: not(inspect.isroutine(a)))
+            MessagePerformative, lambda a: not (inspect.isroutine(a))
+        )
 
-        performatives = sorted(set([a[0] for a in attributes if not(
-            (a[0].startswith('__') and a[0].endswith('__')) or 'name' in a[0] or 'value' in a[0])]))
+        performatives = sorted(
+            set(
+                [
+                    a[0]
+                    for a in attributes
+                    if not (
+                        (a[0].startswith("__") and a[0].endswith("__"))
+                        or "name" in a[0]
+                        or "value" in a[0]
+                    )
+                ]
+            )
+        )
 
-        nodes = sorted([node['id'] for node in graph_data['nodes']])
-        assert nodes == performatives, f'Performatives in graph do not match those in MessagePerformative: {[x for x in nodes if x not in performatives]} - {[x for x in performatives if x not in nodes]}'
+        nodes = sorted([node["id"] for node in graph_data["nodes"]])
+        assert (
+            nodes == performatives
+        ), f"Performatives in graph do not match those in MessagePerformative: {[x for x in nodes if x not in performatives]} - {[x for x in performatives if x not in nodes]}"
 
     def step(self, input: Message = None, preferences: Preferences = None):
         if preferences:
@@ -124,22 +148,31 @@ class FiniteStateMachine(FiniteStateMachineBase):
     def __my_step(self, input: Message, preferences: Preferences) -> Message:
         super().step(input)
         if self.verbose >= 1:
-            print('\n[FiniteStateMachine]: Agents: {} {}'.format(
-                self.agent_a, self.agent_b), end=' ')
+            print(
+                "\n[FiniteStateMachine]: Agents: {} {}".format(
+                    self.agent_a, self.agent_b
+                ),
+                end=" ",
+            )
 
-        next_states = [MessagePerformative[x] for x in list(
-            self.graph.successors(self.current_state.name))]
+        next_states = [
+            MessagePerformative[x]
+            for x in list(self.graph.successors(self.current_state.name))
+        ]
 
         if len(next_states) > 1:
-            next_state = preferences.decide(
-                input, self.current_state, next_states)
-            assert next_state in next_states, f'Next state was not defined in the graph: {next_state} not in {next_states}'
+            next_state = preferences.decide(input, self.current_state, next_states)
+            assert (
+                next_state in next_states
+            ), f"Next state was not defined in the graph: {next_state} not in {next_states}"
         else:
             next_state = next_states[0]
 
         if self.verbose >= 1:
-            print('Current state: {}'.format(self.current_state),
-                  'Next state: {}'.format(next_state))
+            print(
+                "Current state: {}".format(self.current_state),
+                "Next state: {}".format(next_state),
+            )
         msg = preferences.build_message(input, next_state)
 
         self.current_state = next_state
@@ -157,6 +190,5 @@ class FiniteStateMachine(FiniteStateMachineBase):
         return self.current_state == self.initial_state
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     fsm = FiniteStateMachine()
