@@ -24,6 +24,9 @@
             "id": "ASK_WHY"
         },
         {
+            "id": "BECAUSE"
+        },
+        {
             "id": "ARGUE"
         },
         {
@@ -56,7 +59,15 @@
         },
         {
             "source": "ASK_WHY",
+            "target": "BECAUSE"
+        },
+        {
+            "source": "BECAUSE",
             "target": "ARGUE"
+        },
+        {
+            "source": "BECAUSE",
+            "target": "ACCEPT"
         },
         {
             "source": "ARGUE",

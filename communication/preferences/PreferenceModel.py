@@ -129,6 +129,9 @@ class RandomIntervalProfile(PreferenceModel):
         profiles = self.criterion_profile[criterion_name.name]
         value_idx = np.argwhere(real_value > profiles)[-1][0]
 
+        if not CriterionName.is_positive_criterion(criterion_name):
+            value_idx = len(self.value_list) - 1 - value_idx
+
         value = self.value_list[value_idx][1]
 
         return value

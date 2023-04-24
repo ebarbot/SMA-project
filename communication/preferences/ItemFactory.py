@@ -80,6 +80,8 @@ class ItemCreatorCSV(ItemFactory):
             set(self.items_df.columns) - {"ITEM_NAME", "DESCRIPTION"},
         )
 
+        print(criteria_names)
+        print(columns)
         assert (
             criteria_names == columns
         ), "Criteria names in CSV file do not match the ones in CriterionName class"

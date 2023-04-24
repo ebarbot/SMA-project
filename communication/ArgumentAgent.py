@@ -1,10 +1,12 @@
 from collections.abc import Callable
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 from agent.CommunicatingAgent import CommunicatingAgent
 from arguments.Argument import Argument
+from arguments.CoupleValue import CoupleValue
 from conversational_model.FSM import FiniteStateMachine
 from mesa import Model
 from message.Message import Message
@@ -17,6 +19,23 @@ from preferences.PreferenceModel import (
     RandomIntervalProfile,
 )
 from preferences.Preferences import Preferences
+from preferences.Value import Value
+
+
+class Argumentation:
+    def __init__(self, agent_a, agent_b):
+        self.agent_a = agent_a
+        self.agent_b = agent_b
+        self.G = nx.Graph()
+
+    def add_argument(self, argument: Argument):
+        self.G.add_node(argument)
+
+        if argument.get_parent() is not None:
+            self.G.add_edge(argument, argument.get_parent())
+
+    def all_arguments(self):
+        return self.G.nodes
 
 
 class ArgumentAgent(CommunicatingAgent):
@@ -64,8 +83,10 @@ class ArgumentAgent(CommunicatingAgent):
         )
 
         self.list_items: list[Item] = []
-        self.bag: Dict[str, List[str]] = {}
+        self.agreed_items: Dict[str, List[str]] = {}
+        self.disagreed_items: Dict[str, List[str]] = {}
         self.conversations: dict[str, FiniteStateMachine] = {}
+        self.argumentations: dict[str, Argumentation] = {}
 
     def step(self):
         super().step()
@@ -101,7 +122,7 @@ class ArgumentAgent(CommunicatingAgent):
             conversation.reset()
 
     def set_bag(self, bag: Dict[str, List[str]]):
-        self.bag = bag
+        self.agreed_items = bag
 
     def init_conversation(self):
         """Initialize a new conversation with another agent.
@@ -175,10 +196,14 @@ class ArgumentAgent(CommunicatingAgent):
             value = criterion_value.get_value().name
 
             pref_table[criterion][item] = value
-
         pref_table = pd.DataFrame(pref_table)
         print("Preference table of ", self.get_name(), ":")
         print(pref_table)
+        df_items = pd.DataFrame(
+            {x: [x.get_score(self.preferences)] for x in self.list_items},
+        )
+        print("Score of each item for ", self.get_name(), ":")
+        print(df_items)
 
     def generate_preferences(
         self,
@@ -205,6 +230,11 @@ class ArgumentAgent(CommunicatingAgent):
 
         criterion_name_list = [CriterionName[x] for x in criterion_list]
         np.random.shuffle(criterion_name_list)
+        print("Agent ", self.get_name(), " criterion_name_list: ", end=" ")
+        for criterion in criterion_name_list[0:-1]:
+            print(criterion.name + " >", end=" ")
+        print(criterion_name_list[-1].name)
+
         self.preferences.set_criterion_name_list(criterion_name_list)
 
         profiler = RandomIntervalProfile(map_item_criterion, verbose)
@@ -220,21 +250,36 @@ class ArgumentAgent(CommunicatingAgent):
         if verbose == 2:
             self.print_preference_table()
 
-    def support_proposal(self, item):
+    def support_proposal(self, item: str, agent: str):
         """
         Used when the agent receives " ASK_WHY " after having proposed an item
         : param item : str - name of the item which was proposed
         : return : string - the strongest supportive argument
         """
-        item = [x for x in self.list_items if x.get_name() == item][0]
-        best_argument = Argument(True, item)
+        items = [x for x in self.list_items if x.get_name() == item]
+        item = items[0]
+        best_argument = Argument(True, item, self.get_name())
         list_arguments = best_argument.list_supporting_proposal(item, self.preferences)
+        # remove already used arguments
+        idx = 0
+        best_argument.add_premiss_couple_values(
+            list_arguments[idx].criterion_name,
+            list_arguments[idx].value,
+        )
+        if agent in self.argumentations:
+            already_used_arguments = self.argumentations[agent].all_arguments()
+            for already_used_argument in already_used_arguments:
+                if best_argument == already_used_argument:
+                    idx += 1
+                    if idx >= len(list_arguments):
+                        return None
+                    best_argument = Argument(True, item, self.get_name())
+                    best_argument.add_premiss_couple_values(
+                        list_arguments[idx].criterion_name,
+                        list_arguments[idx].value,
+                    )
 
         # les arguments sont ordonnés dans la liste
-        best_argument.add_premiss_couple_values(
-            list_arguments[0].criterion_name,
-            list_arguments[0].value,
-        )
         return best_argument
 
     def attack_proposal(self, item):
@@ -244,8 +289,8 @@ class ArgumentAgent(CommunicatingAgent):
         : return : string - the strongest supportive argument
         """
         item = [x for x in self.list_items if x.get_name() == item][0]
-        best_argument = Argument(False, item)
-        list_arguments = best_argument.list_attacking_proposal(self.preferences)
+        best_argument = Argument(False, item, self.get_name())
+        list_arguments = best_argument.list_attacking_proposal(item, self.preferences)
         # les arguments sont ordonnés dans la liste
         best_argument.add_premiss_couple_values(
             list_arguments[0].criterion_name,
@@ -253,57 +298,79 @@ class ArgumentAgent(CommunicatingAgent):
         )
         return best_argument
 
+    def better_alternative_same_criterion(
+        self,
+        proposed_item: Item,
+        premisse: CoupleValue,
+    ) -> Tuple[Item, Value]:
+        proposed_value = premisse.value
+        criterion_name = premisse.criterion_name
+        for item in self.list_items:
+            if item.get_name() == proposed_item.get_name():
+                continue
+            item_value = self.preferences.get_value(item, criterion_name)
+            if item_value.value > proposed_value.value:
+                return (item, item_value)
+        return None
+
+    def has_bad_evaluation(self, item: Item, premisse: CoupleValue):
+        item_val = self.preferences.get_value(item, premisse.criterion_name)
+        if item_val.value < premisse.value.value:
+            return (item, item_val)
+        return None
+
+    def bad_evaluation_other_criterion(self, item: Item, premisse: CoupleValue):
+        for criterion in self.preferences.get_criterion_name_list():
+            if premisse.criterion_name == criterion:
+                break
+            item_value = self.preferences.get_value(item, criterion)
+            if item_value.value < premisse.value.value:
+                return (criterion, item_value)
+        return None
+
     def parse_argument(self, argument: Argument):
         proposed_item = argument.get_item()
         comparison_premisses, couple_value_premisses = argument.get_premisses()
+        if not argument.decision:
+            best_argument = self.support_proposal(
+                proposed_item.get_name(),
+                argument.get_agent(),
+            )
+            return best_argument
 
-        items_with_better_value = []
-        criterions_preffered = []
-        value_is_bad_for_criterion = []
         for premisse in couple_value_premisses:
-            proposed_criterion = premisse.criterion_name
-            proposed_value = premisse.value
-            for criterion in self.preferences.get_criterion_name_list():
-                # Check if one criterion is preffered
-                if self.preferences.is_preferred_criterion(
-                    criterion,
-                    proposed_criterion,
-                ):
-                    criterions_preffered.append((criterion, proposed_criterion))
-
-                    # Check if other criterion has a low value
-                    items_value = self.preferences.get_value(proposed_item, criterion)
-                    if items_value < proposed_value:
-                        value_is_bad_for_criterion.append(
-                            (criterion, items_value),
-                        )
-
-            # Check if one item has a better value for the argument's criterion
-            for item in self.list_items:
-                if item.get_name() == proposed_item.get_name():
-                    continue
-
-                if (
-                    self.preferences.get_value(item, proposed_criterion)
-                    > proposed_value
-                ):
-                    items_with_better_value.append((item, proposed_criterion))
-
-        for criterion, value in value_is_bad_for_criterion:
-            reply = Argument(False, proposed_item)
-            reply.add_premiss_comparison(criterion, proposed_criterion)
-            reply.add_premiss_couple_values(criterion, value)
-            return reply
-
-        # Check if my value is worse than the proposed value
-        value = self.preferences.get_value(proposed_item, proposed_criterion)
-        if value < proposed_value:
-            reply = Argument(False, proposed_item)
-            reply.add_premiss_couple_values(proposed_criterion, value)
-            return reply
-
-        for item, criterion in items_with_better_value:
-            reply = Argument(True, item)
-            reply.add_premiss_comparison(criterion, proposed_criterion)
-            reply.add_premiss_couple_values(criterion, value)
-            return reply
+            better_alternative = self.better_alternative_same_criterion(
+                proposed_item,
+                premisse,
+            )
+            bad_evaluation = self.has_bad_evaluation(proposed_item, premisse)
+            bad_evaluation_other_criterion = self.bad_evaluation_other_criterion(
+                proposed_item,
+                premisse,
+            )
+            if better_alternative:
+                reply = Argument(
+                    True,
+                    better_alternative[0],
+                    self.get_name(),
+                )
+                reply.add_premiss_couple_values(
+                    premisse.criterion_name,
+                    better_alternative[1],
+                )
+                return reply
+            if bad_evaluation:
+                reply = Argument(not argument.decision, proposed_item, self.get_name())
+                reply.add_premiss_couple_values(
+                    premisse.criterion_name,
+                    bad_evaluation[1],
+                )
+                return reply
+            if bad_evaluation_other_criterion:
+                reply = Argument(not argument.decision, proposed_item, self.get_name())
+                reply.add_premiss_couple_values(
+                    bad_evaluation_other_criterion[0],
+                    bad_evaluation_other_criterion[1],
+                )
+                return reply
+        return None

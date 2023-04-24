@@ -2,7 +2,7 @@ from typing import List
 
 import numpy as np
 from agent.CommunicatingAgent import CommunicatingAgent
-from ArgumentAgent import ArgumentAgent
+from ArgumentAgent import ArgumentAgent, Argumentation
 from arguments.Argument import Argument
 from message.Message import Message
 from message.MessagePerformative import MessagePerformative
@@ -49,42 +49,66 @@ def standard_agent_message_builder(
     ):
         content: Argument | Item | str = input.get_content()
         exp = input.get_exp()
-        if isinstance(content, Argument):
-            item_name = content.__item
-        elif isinstance(content, Item):
-            item_name = content.get_name()
-        elif isinstance(content, str):
-            item_name = content
-        elif not isinstance(content, str):
-            raise Exception("item_name should be a string, an Argument or an Item")
+        item_name = get_item_name(input)
 
-        if exp not in agent.bag:
-            agent.bag[exp] = []
-        agent.bag[exp].append(item_name)
+        if exp not in agent.agreed_items:
+            agent.agreed_items[exp] = []
+        agent.agreed_items[exp].append(item_name)
+
+    if next_state == MessagePerformative.REJECT:
+        item_name = get_item_name(input)
+        exp = input.get_exp()
+        if exp not in agent.disagreed_items:
+            agent.disagreed_items[exp] = []
+        agent.disagreed_items[exp].append(item_name)
 
     if next_state == MessagePerformative.ARGUE:
         item_name = get_item_name(input)
-        argument = agent.support_proposal(item_name)
+        proposed_argument = input.get_content()
+        argument = agent.parse_argument(proposed_argument)
+        argument.set_parent(proposed_argument)
+
+        if input.get_exp() not in agent.argumentations:
+            agent.argumentations[input.get_exp()] = Argumentation(
+                agent.get_name(),
+                input.get_exp(),
+            )
+
+        agent.argumentations[input.get_exp()].add_argument(argument)
         message = Message(agent.get_name(), input.get_exp(), next_state, argument)
         agent.send_message(message)
         return message
 
-    # if next_state == MessagePerformative.ASK_WHY:
-    # item = input.get_content()
-    # argument = agent.attack_proposal(item)
-    # message = Message(agent.get_name(), input.get_exp(), next_state, argument)
-    # agent.send_message(message)
-    # return message
+    if next_state == MessagePerformative.BECAUSE:
+        item = input.get_content()
+        argument = agent.support_proposal(item, input.get_exp())
+        argument.set_parent(None)
+        message = Message(agent.get_name(), input.get_exp(), next_state, argument)
+        if input.get_exp() not in agent.argumentations:
+            agent.argumentations[input.get_exp()] = Argumentation(
+                agent.get_name(),
+                input.get_exp(),
+            )
+
+        agent.argumentations[input.get_exp()].add_argument(argument)
+        agent.send_message(message)
+        return message
 
     if next_state == MessagePerformative.PROPOSE:
         chosen_agent_name = input.get_dest()
         already_agreed: List[str] = []
-        if chosen_agent_name in agent.bag:
-            already_agreed = agent.bag[chosen_agent_name]
+        if chosen_agent_name in agent.agreed_items:
+            already_agreed = agent.agreed_items[chosen_agent_name]
+        already_disagreed: List[str] = []
+        if chosen_agent_name in agent.disagreed_items:
+            already_disagreed = agent.disagreed_items[chosen_agent_name]
 
-        item = preferences.most_preferred(
-            [x for x in agent.list_items if x.get_name() not in already_agreed],
-        )
+        available_proposals = [
+            x
+            for x in agent.list_items
+            if x.get_name() not in already_agreed + already_disagreed
+        ]
+        item = preferences.most_preferred(available_proposals)
 
         chosen_agent: CommunicatingAgent = [
             x for x in agent.model.schedule.agents if x.get_name() == chosen_agent_name
@@ -151,13 +175,24 @@ def standard_agent_decision_builder(
     if current_state == MessagePerformative.IDLE:
         chosen_agent_name = input.get_dest()
         already_agreed: List[str] = []
-        if chosen_agent_name in agent.bag:
-            already_agreed = agent.bag[chosen_agent_name]
+        already_disagreed: List[str] = []
+        if chosen_agent_name in agent.agreed_items:
+            already_agreed = agent.agreed_items[chosen_agent_name]
+        if chosen_agent_name in agent.disagreed_items:
+            already_disagreed = agent.disagreed_items[chosen_agent_name]
 
         available_proposals = [
-            x for x in agent.list_items if x.get_name() not in already_agreed
+            x
+            for x in agent.list_items
+            if x.get_name() not in already_agreed + already_disagreed
         ]
+
         if len(available_proposals) == 0:
+            return MessagePerformative.IDLE
+
+        item = agent.preferences.most_preferred(available_proposals)
+        argument = agent.support_proposal(item.get_name(), input.get_exp())
+        if not argument:
             return MessagePerformative.IDLE
 
         return np.random.choice(next_states, p=[0.5, 0.5])
@@ -173,16 +208,18 @@ def standard_agent_decision_builder(
     if current_state == MessagePerformative.ACCEPT:
         return MessagePerformative.COMMIT
 
-    if current_state == MessagePerformative.ARGUE:
+    if (
+        current_state == MessagePerformative.ARGUE
+        or current_state == MessagePerformative.BECAUSE
+    ):
         item_name = get_item_name(input)
-        item = [x for x in agent.list_items if x.get_name() == item_name][0]
-        argument = Argument(False, item)
+        proposed_argument: Argument = input.get_content()
+        argument = agent.parse_argument(proposed_argument)
 
-        list_attacking = argument.list_attacking_proposal(
-            item,
-            agent.preferences,
-        )
-        if len(list_attacking) > 0:
-            return MessagePerformative.ARGUE
+        if argument is None:
+            if proposed_argument.decision:
+                return MessagePerformative.ACCEPT
+            else:
+                return MessagePerformative.REJECT
 
-        return MessagePerformative.ACCEPT
+        return MessagePerformative.ARGUE

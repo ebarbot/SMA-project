@@ -18,12 +18,29 @@ class Argument:
         couple_values_list :
     """
 
-    def __init__(self, boolean_decision: bool, item: Item):
+    def __init__(self, boolean_decision: bool, item: Item, agent_name: str):
         """Creates a new Argument ."""
         self.decision = boolean_decision
         self.__item: Item = item
         self.__comparison_list: List[Comparison] = []
         self.__couple_value_list: List[CoupleValue] = []
+        self.__parent: "Argument" = None
+        self.__agent_name: str = agent_name
+
+    def __hash__(self) -> int:
+        return hash(self.__str__())
+
+    def __eq__(self, __value: object) -> bool:
+        return self.__str__() == __value.__str__()
+
+    def get_agent(self) -> str:
+        return self.__agent_name
+
+    def set_parent(self, parent: "Argument"):
+        self.__parent = parent
+
+    def get_parent(self) -> "Argument":
+        return self.__parent
 
     def get_premiss_comparison(self) -> List[Comparison]:
         """Returns the comparison list ."""
@@ -43,13 +60,14 @@ class Argument:
     def __str__(self) -> str:
         """Returns a string representation of the argument ."""
         return (
-            "["
+            f"[ {'not ' if not self.decision else ''}"
             + str(self.__item)
             + "; "
-            + str(" ".join([str(x) for x in self.__comparison_list]))
-            + " "
+            + f"for {self.get_agent().lower()}: "
             + str(",".join([str(x) for x in self.__couple_value_list]))
-            + "]"
+            + " "
+            + f"{'and ' + str(' '.join([str(x) for x in self.__comparison_list])) if len(self.__comparison_list) > 0 else ''}"
+            + "] "
         )
 
     def add_premiss_comparison(self, criterion_name_1, criterion_name_2):
@@ -86,12 +104,6 @@ class Argument:
             if value == Value.VERY_GOOD or value == Value.GOOD:
                 supporting_proposals.append(CoupleValue(criterion_name, value))
 
-                for critetion_2 in criterion_names:
-                    if preferences.is_preferred_criterion(criterion_name, critetion_2):
-                        supporting_proposals.append(
-                            Comparison(criterion_name, critetion_2),
-                        )
-
         return supporting_proposals
 
     def list_attacking_proposal(
@@ -110,10 +122,5 @@ class Argument:
 
             if value == Value.VERY_BAD or value == Value.BAD:
                 attacking_proposals.append(CoupleValue(criterion_name, value))
-                for criterion_2 in criterion_names:
-                    if preferences.is_preferred_criterion(criterion_2, criterion_name):
-                        attacking_proposals.append(
-                            Comparison(criterion_2, criterion_name),
-                        )
 
-        return self.__couple_value_list
+        return attacking_proposals
