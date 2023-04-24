@@ -1,7 +1,7 @@
 import copy
 
 from ArgumentAgent import ArgumentAgent
-from mesa import Model
+from mesa import DataCollector, Model
 from mesa.time import RandomActivation
 from message.MessageService import MessageService
 from preferences.ItemFactory import ItemCreatorCSV
@@ -22,7 +22,7 @@ class ArgumentModel(Model):
 
     """
 
-    def __init__(self, num_agents: int = 2):
+    def __init__(self, num_agents: int = 2, verbose: bool = False):
         """
         Initializes a new ArgumentModel object.
 
@@ -43,7 +43,8 @@ class ArgumentModel(Model):
         """
 
         self.schedule = RandomActivation(self)
-        self.__messages_service = MessageService(self.schedule)
+        self.verbose = verbose
+        self.__messages_service = MessageService(self.schedule, verbose=self.verbose)
 
         item_creator = ItemCreatorCSV()
         items_list, map_item_criterion = item_creator.create()
@@ -54,11 +55,26 @@ class ArgumentModel(Model):
             new_agent.generate_preferences(
                 copy.deepcopy(items_list),
                 copy.deepcopy(map_item_criterion),
-                verbose=2,
+                verbose=0,
             )
             self.schedule.add(new_agent)
 
         self.running = True
+
+        self.datacollector = DataCollector(
+            model_reporters={
+                "Commited": lambda m: {
+                    agent.get_name(): {
+                        agent_b: list(agreed)
+                        for agent_b, agreed in agent.agreed_items.items()
+                    }
+                    for agent in m.schedule.agent_buffer()
+                },
+            },
+            tables={
+                "Count": ["Commited"],
+            },
+        )
 
     def __create_agent(self) -> ArgumentAgent:
         # Creates a new agent and returns it.
@@ -68,11 +84,13 @@ class ArgumentModel(Model):
             "Agent " + str(self.current_id),
             standard_agent_decision_builder,
             standard_agent_message_builder,
+            self.verbose,
         )
 
     def step(self):
         # Runs one step of the simulation.
         self.__messages_service.dispatch_messages()
+        self.datacollector.collect(self)
         self.schedule.step()
 
     def run_n_steps(self, n: int):

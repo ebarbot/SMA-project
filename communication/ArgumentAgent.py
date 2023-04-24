@@ -64,6 +64,7 @@ class ArgumentAgent(CommunicatingAgent):
         name: str,
         decision_function: Callable[[Message, MessagePerformative], Message],
         message_builder: Callable[[Message, MessagePerformative], Message],
+        verbose: bool = False,
     ):
         super().__init__(unique_id, model, name)
         self.preferences = Preferences(
@@ -84,9 +85,10 @@ class ArgumentAgent(CommunicatingAgent):
 
         self.list_items: list[Item] = []
         self.agreed_items: Dict[str, List[str]] = {}
-        self.disagreed_items: Dict[str, List[str]] = {}
+        self.proposed_items: Dict[str, List[str]] = {}
         self.conversations: dict[str, FiniteStateMachine] = {}
         self.argumentations: dict[str, Argumentation] = {}
+        self.verbose = verbose
 
     def step(self):
         super().step()
@@ -209,7 +211,7 @@ class ArgumentAgent(CommunicatingAgent):
         self,
         list_items: list[Item],
         map_item_criterion: dict[Item, dict[CriterionName, int | float]],
-        verbose: int = 0,
+        verbose: bool = False,
     ):
         """
         The generate_preferences method generates the agent's preference
@@ -230,10 +232,11 @@ class ArgumentAgent(CommunicatingAgent):
 
         criterion_name_list = [CriterionName[x] for x in criterion_list]
         np.random.shuffle(criterion_name_list)
-        print("Agent ", self.get_name(), " criterion_name_list: ", end=" ")
-        for criterion in criterion_name_list[0:-1]:
-            print(criterion.name + " >", end=" ")
-        print(criterion_name_list[-1].name)
+        if self.verbose:
+            print("Agent ", self.get_name(), " criterion_name_list: ", end=" ")
+            for criterion in criterion_name_list[0:-1]:
+                print(criterion.name + " >", end=" ")
+            print(criterion_name_list[-1].name)
 
         self.preferences.set_criterion_name_list(criterion_name_list)
 
@@ -247,7 +250,7 @@ class ArgumentAgent(CommunicatingAgent):
                     CriterionValue(item, CriterionName[criterion], value),
                 )
 
-        if verbose == 2:
+        if verbose:
             self.print_preference_table()
 
     def support_proposal(self, item: str, agent: str):
@@ -261,6 +264,8 @@ class ArgumentAgent(CommunicatingAgent):
         best_argument = Argument(True, item, self.get_name())
         list_arguments = best_argument.list_supporting_proposal(item, self.preferences)
         # remove already used arguments
+        if len(list_arguments) == 0:
+            return None
         idx = 0
         best_argument.add_premiss_couple_values(
             list_arguments[idx].criterion_name,
@@ -268,19 +273,31 @@ class ArgumentAgent(CommunicatingAgent):
         )
         if agent in self.argumentations:
             already_used_arguments = self.argumentations[agent].all_arguments()
-            for already_used_argument in already_used_arguments:
-                if best_argument == already_used_argument:
-                    idx += 1
-                    if idx >= len(list_arguments):
-                        return None
-                    best_argument = Argument(True, item, self.get_name())
-                    best_argument.add_premiss_couple_values(
-                        list_arguments[idx].criterion_name,
-                        list_arguments[idx].value,
-                    )
+            while self.has_already_been_used(
+                best_argument,
+                already_used_arguments,
+            ):
+                idx += 1
+                if idx >= len(list_arguments):
+                    return None
+                best_argument = Argument(True, item, self.get_name())
+                best_argument.add_premiss_couple_values(
+                    list_arguments[idx].criterion_name,
+                    list_arguments[idx].value,
+                )
 
         # les arguments sont ordonnés dans la liste
         return best_argument
+
+    def has_already_been_used(
+        self,
+        best_argument: Argument,
+        already_used_arguments: Argument,
+    ) -> bool:
+        for already_used_argument in already_used_arguments:
+            if best_argument == already_used_argument:
+                return True
+        return False
 
     def attack_proposal(self, item):
         """
@@ -371,6 +388,10 @@ class ArgumentAgent(CommunicatingAgent):
                 reply.add_premiss_couple_values(
                     bad_evaluation_other_criterion[0],
                     bad_evaluation_other_criterion[1],
+                )
+                reply.add_premiss_comparison(
+                    bad_evaluation_other_criterion[0],
+                    premisse.criterion_name,
                 )
                 return reply
         return None

@@ -102,6 +102,13 @@ class Preferences:
             max_val = max(max_val, val[0])
         return np.random.choice([item[1] for item in liste if item[0] == max_val])
 
+    # Sort the items by their score
+    def sort_items(self, item_list: list[Item]) -> list[tuple[float, Item]]:
+        return sorted(
+            [(item.get_score(self), item.get_name()) for item in item_list],
+            reverse=True,
+        )
+
     def is_item_among_top_10_percent(self, item: Item, item_list: list[Item]) -> bool:
         """
         Return whether a given item is among the top 10 percent of the preferred items.

@@ -63,7 +63,6 @@ class Argument:
             f"[ {'not ' if not self.decision else ''}"
             + str(self.__item)
             + "; "
-            + f"for {self.get_agent().lower()}: "
             + str(",".join([str(x) for x in self.__couple_value_list]))
             + " "
             + f"{'and ' + str(' '.join([str(x) for x in self.__comparison_list])) if len(self.__comparison_list) > 0 else ''}"

@@ -53,21 +53,13 @@ def standard_agent_message_builder(
 
         if exp not in agent.agreed_items:
             agent.agreed_items[exp] = []
-        agent.agreed_items[exp].append(item_name)
-
-    if next_state == MessagePerformative.REJECT:
-        item_name = get_item_name(input)
-        exp = input.get_exp()
-        if exp not in agent.disagreed_items:
-            agent.disagreed_items[exp] = []
-        agent.disagreed_items[exp].append(item_name)
+        if item_name not in agent.agreed_items[exp]:
+            agent.agreed_items[exp].append(item_name)
 
     if next_state == MessagePerformative.ARGUE:
         item_name = get_item_name(input)
         proposed_argument = input.get_content()
         argument = agent.parse_argument(proposed_argument)
-        argument.set_parent(proposed_argument)
-
         if input.get_exp() not in agent.argumentations:
             agent.argumentations[input.get_exp()] = Argumentation(
                 agent.get_name(),
@@ -75,22 +67,23 @@ def standard_agent_message_builder(
             )
 
         agent.argumentations[input.get_exp()].add_argument(argument)
+
+        argument.set_parent(proposed_argument)
         message = Message(agent.get_name(), input.get_exp(), next_state, argument)
         agent.send_message(message)
         return message
 
     if next_state == MessagePerformative.BECAUSE:
         item = input.get_content()
-        argument = agent.support_proposal(item, input.get_exp())
-        argument.set_parent(None)
-        message = Message(agent.get_name(), input.get_exp(), next_state, argument)
         if input.get_exp() not in agent.argumentations:
             agent.argumentations[input.get_exp()] = Argumentation(
                 agent.get_name(),
                 input.get_exp(),
             )
-
+        argument = agent.support_proposal(item, input.get_exp())
         agent.argumentations[input.get_exp()].add_argument(argument)
+        argument.set_parent(None)
+        message = Message(agent.get_name(), input.get_exp(), next_state, argument)
         agent.send_message(message)
         return message
 
@@ -99,16 +92,20 @@ def standard_agent_message_builder(
         already_agreed: List[str] = []
         if chosen_agent_name in agent.agreed_items:
             already_agreed = agent.agreed_items[chosen_agent_name]
-        already_disagreed: List[str] = []
-        if chosen_agent_name in agent.disagreed_items:
-            already_disagreed = agent.disagreed_items[chosen_agent_name]
+
+        already_proposed = []
+        if chosen_agent_name in agent.proposed_items:
+            already_proposed = agent.proposed_items[chosen_agent_name]
 
         available_proposals = [
             x
             for x in agent.list_items
-            if x.get_name() not in already_agreed + already_disagreed
+            if x.get_name() not in already_agreed + already_proposed
         ]
         item = preferences.most_preferred(available_proposals)
+        if chosen_agent_name not in agent.proposed_items:
+            agent.proposed_items[chosen_agent_name] = []
+        agent.proposed_items[chosen_agent_name].append(item.get_name())
 
         chosen_agent: CommunicatingAgent = [
             x for x in agent.model.schedule.agents if x.get_name() == chosen_agent_name
@@ -125,6 +122,14 @@ def standard_agent_message_builder(
     if next_state == MessagePerformative.ACCEPT:
         item_name = get_item_name(input)
 
+        exp = input.get_dest()
+        dest = input.get_exp()
+        message = Message(exp, dest, next_state, item_name)
+        agent.send_message(message)
+        return message
+
+    if next_state == MessagePerformative.QUERY_REF:
+        item_name = get_item_name(input)
         exp = input.get_dest()
         dest = input.get_exp()
         message = Message(exp, dest, next_state, item_name)
@@ -175,23 +180,22 @@ def standard_agent_decision_builder(
     if current_state == MessagePerformative.IDLE:
         chosen_agent_name = input.get_dest()
         already_agreed: List[str] = []
-        already_disagreed: List[str] = []
+        already_proposed: List[str] = []
         if chosen_agent_name in agent.agreed_items:
             already_agreed = agent.agreed_items[chosen_agent_name]
-        if chosen_agent_name in agent.disagreed_items:
-            already_disagreed = agent.disagreed_items[chosen_agent_name]
+        if chosen_agent_name in agent.proposed_items:
+            already_proposed = agent.proposed_items[chosen_agent_name]
 
         available_proposals = [
             x
             for x in agent.list_items
-            if x.get_name() not in already_agreed + already_disagreed
+            if x.get_name() not in already_agreed + already_proposed
         ]
-
         if len(available_proposals) == 0:
             return MessagePerformative.IDLE
 
         item = agent.preferences.most_preferred(available_proposals)
-        argument = agent.support_proposal(item.get_name(), input.get_exp())
+        argument = agent.support_proposal(item.get_name(), input.get_dest())
         if not argument:
             return MessagePerformative.IDLE
 
@@ -199,8 +203,9 @@ def standard_agent_decision_builder(
 
     if current_state == MessagePerformative.PROPOSE:
         item_name = get_item_name(input)
+        item = [x for x in agent.list_items if x.get_name() == item_name][0]
 
-        if preferences.most_preferred(agent.list_items).get_name() == item_name:
+        if preferences.is_item_among_top_10_percent(item, agent.list_items):
             return MessagePerformative.ACCEPT
 
         return MessagePerformative.ASK_WHY
@@ -215,11 +220,10 @@ def standard_agent_decision_builder(
         item_name = get_item_name(input)
         proposed_argument: Argument = input.get_content()
         argument = agent.parse_argument(proposed_argument)
-
         if argument is None:
             if proposed_argument.decision:
                 return MessagePerformative.ACCEPT
             else:
-                return MessagePerformative.REJECT
+                return MessagePerformative.QUERY_REF
 
         return MessagePerformative.ARGUE

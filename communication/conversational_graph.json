@@ -75,7 +75,11 @@
         },
         {
             "source": "ARGUE",
-            "target": "REJECT"
+            "target": "QUERY_REF"
+        },
+        {
+            "source": "QUERY_REF",
+            "target": "IDLE"
         },
         {
             "source": "ARGUE",
